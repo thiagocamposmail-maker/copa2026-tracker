@@ -18,6 +18,7 @@ PRE_MATCH_MINS   = int(os.environ.get("PRE_MATCH_MINS", "5"))
 COMPETITION_ID   = "WC"
 STATE_FILE       = os.environ.get("STATE_FILE", "/data/state.json")
 LOCAL_TZ_OFFSET  = int(os.environ.get("LOCAL_TZ_OFFSET", "-3"))  # BRT = UTC-3
+DAY_START_HOUR   = int(os.environ.get("DAY_START_HOUR", "6"))    # jogos após meia-noite até 6h pertencem ao dia anterior
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger(__name__)
@@ -298,15 +299,22 @@ def process_match(match, state: dict):
 def local_now() -> datetime:
     return datetime.now(timezone.utc) + timedelta(hours=LOCAL_TZ_OFFSET)
 
+def notification_day(dt: datetime) -> object:
+    """Retorna a 'data de notificação' de um datetime local: jogos antes de DAY_START_HOUR pertencem ao dia anterior."""
+    local = dt.astimezone(timezone(timedelta(hours=LOCAL_TZ_OFFSET)))
+    shifted = local - timedelta(hours=DAY_START_HOUR)
+    return shifted.date()
+
+def today_notification_day():
+    return notification_day(datetime.now(timezone.utc))
+
 
 def notify_daily_schedule(matches: list):
-    today = local_now().date()
+    today = today_notification_day()
     today_matches = [
         m for m in matches
         if m["status"] != "FINISHED"
-        and datetime.fromisoformat(m["utcDate"].replace("Z", "+00:00")).astimezone(
-            timezone(timedelta(hours=LOCAL_TZ_OFFSET))
-        ).date() == today
+        and notification_day(datetime.fromisoformat(m["utcDate"].replace("Z", "+00:00"))) == today
     ]
     if not today_matches:
         return
@@ -331,13 +339,11 @@ def notify_daily_schedule(matches: list):
 
 
 def notify_daily_results(matches: list):
-    today = local_now().date()
+    today = today_notification_day()
     finished = [
         m for m in matches
         if m["status"] == "FINISHED"
-        and datetime.fromisoformat(m["utcDate"].replace("Z", "+00:00")).astimezone(
-            timezone(timedelta(hours=LOCAL_TZ_OFFSET))
-        ).date() == today
+        and notification_day(datetime.fromisoformat(m["utcDate"].replace("Z", "+00:00"))) == today
     ]
     if not finished:
         return
@@ -400,7 +406,7 @@ def run():
         log.info(f"  {len(matches)} partida(s) hoje")
 
         now_local = local_now()
-        today     = now_local.date()
+        today     = today_notification_day()
 
         # ── Resumo matinal às 8h ───────────────────────────
         if now_local.hour >= 8 and last_schedule_date != today:
