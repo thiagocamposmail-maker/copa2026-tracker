@@ -300,7 +300,14 @@ def local_now() -> datetime:
 
 
 def notify_daily_schedule(matches: list):
-    today_matches = [m for m in matches if m["status"] != "FINISHED"]
+    today = local_now().date()
+    today_matches = [
+        m for m in matches
+        if m["status"] != "FINISHED"
+        and datetime.fromisoformat(m["utcDate"].replace("Z", "+00:00")).astimezone(
+            timezone(timedelta(hours=LOCAL_TZ_OFFSET))
+        ).date() == today
+    ]
     if not today_matches:
         return
     lines = []
@@ -324,7 +331,14 @@ def notify_daily_schedule(matches: list):
 
 
 def notify_daily_results(matches: list):
-    finished = [m for m in matches if m["status"] == "FINISHED"]
+    today = local_now().date()
+    finished = [
+        m for m in matches
+        if m["status"] == "FINISHED"
+        and datetime.fromisoformat(m["utcDate"].replace("Z", "+00:00")).astimezone(
+            timezone(timedelta(hours=LOCAL_TZ_OFFSET))
+        ).date() == today
+    ]
     if not finished:
         return
     lines = []
